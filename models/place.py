@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, Boolean, Enum, JSON, DateTime
+from sqlalchemy import Column, Integer, String, Float, Boolean, Enum, JSON, DateTime, SmallInteger
 from database import Base
 
 class PlaceCategory(enum.Enum):
@@ -24,5 +24,6 @@ class Place(Base):
     opening_hours = Column(JSON, nullable=True)
     phone = Column(String, nullable=True)
     rating = Column(Float, default=0.0)
+    safety_level = Column(SmallInteger, default=2)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
