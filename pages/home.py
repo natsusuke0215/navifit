@@ -1,6 +1,37 @@
 import httpx
 from nicegui import ui
 
+JP_WOMAN_SVG = '''<svg width="22" height="28" viewBox="0 0 22 28" xmlns="http://www.w3.org/2000/svg">
+  <path d="M5 9 Q5 3 11 3 Q17 3 17 9 Q17 6 11 7.5 Q5 6 5 9Z" fill="#2d1b0e"/>
+  <ellipse cx="11" cy="9" rx="4.5" ry="5" fill="#f5cba7"/>
+  <circle cx="8" cy="4.5" r="1.3" fill="#c0392b"/>
+  <rect x="7.5" y="3.5" width="3" height="1" rx="0.5" fill="#c0392b"/>
+  <path d="M2 28 L6 14 L11 12 L16 14 L20 28Z" fill="#c0392b"/>
+  <path d="M9 13.5 L11 12 L13 13.5 L11 21Z" fill="white"/>
+  <rect x="6" y="18.5" width="10" height="2.5" rx="1.25" fill="#8B0000"/>
+  <rect x="15" y="17.5" width="4" height="4" rx="1" fill="#8B0000"/>
+</svg>'''
+
+SAFETY_CONFIG = {
+    1: ('安全',      '#4CAF50', 'white'),
+    2: ('まあ安全',   '#FFC107', '#333'),
+    3: ('かなり安全', '#FF9800', 'white'),
+    4: ('危険',      '#F44336', 'white'),
+}
+
+CAT_KEYWORDS = {
+    'gym': 'gym', 'phòng gym': 'gym', 'phòng tập': 'gym', 'thể hình': 'gym', 'fitness': 'gym',
+    'park': 'park', 'công viên': 'park', 'vườn hoa': 'park',
+    'pool': 'pool', 'hồ bơi': 'pool', 'bể bơi': 'pool', 'bơi': 'pool',
+    'badminton': 'badminton', 'cầu lông': 'badminton', 'sân cầu': 'badminton',
+}
+
+def _aqi_badge(v: int) -> tuple:
+    if v <= 50:    return 'AQI いい', '#4CAF50', 'white'
+    elif v <= 100: return 'AQI 普通', '#FFC107', '#333'
+    elif v <= 150: return 'AQI 悪い', '#FF9800', 'white'
+    else:          return 'AQI 最悪', '#F44336', 'white'
+
 @ui.page('/')
 async def home_page():
     ui.page_title('NaviFit — Trang chủ')
@@ -20,17 +51,14 @@ async def home_page():
                 ui.navigate.to(f'/search?q={q}')
 
         import asyncio
-        with ui.column().classes('relative w-1/3 gap-0'):
+        with ui.column().classes('relative w-2/5 gap-0'):
             search_state = {'task': None}
-
-            from services import places_service
-            from database import async_session
 
             async def perform_search(q):
                 if not q:
-                    suggestions_box.classes(add='hidden')
+                    suggestions_box.set_visibility(False)
                     return
-                lat, lng = 21.006847, 105.843058  # Default HUST B1
+                lat, lng = 21.006847, 105.843058
                 try:
                     lat_js = await ui.run_javascript('window.currentLat || null', timeout=0.5)
                     lng_js = await ui.run_javascript('window.currentLng || null', timeout=0.5)
@@ -39,25 +67,96 @@ async def home_page():
                 except Exception:
                     pass
 
+                # AQI cho khu vực (fetch 1 lần)
+                aqi_label, aqi_color, aqi_tc = 'AQI いい', '#4CAF50', 'white'
                 try:
-                    async with async_session() as db:
-                        places = await places_service.search_places(db, q, lat, lng)
+                    async with httpx.AsyncClient(timeout=3.0) as client:
+                        r = await client.get(f'http://127.0.0.1:8081/api/aqi?lat={lat}&lng={lng}')
+                        if r.status_code == 200:
+                            aqi_label, aqi_color, aqi_tc = _aqi_badge(r.json().get('aqi_value', 0))
+                except Exception:
+                    pass
 
-                        suggestions_list.clear()
-                        if places:
-                            suggestions_box.classes(remove='hidden')
-                            with suggestions_list:
-                                for place in places:
-                                    with ui.row().classes('w-full items-center p-3 hover:bg-gray-100 cursor-pointer border-b last:border-b-0').on('click', lambda p_name=place.name: ui.navigate.to(f'/search?q={p_name}&lat=21.006847&lng=105.843058')):
-                                        ui.icon('place', color='gray').classes('mr-2 text-xl')
-                                        with ui.column().classes('gap-0'):
-                                            ui.label(place.name).classes('font-bold text-sm text-black')
-                                            ui.label(f"{round(place.distance/1000, 1)} km").classes('text-xs text-gray-500')
-                        else:
-                            suggestions_box.classes(add='hidden')
+                try:
+                    async with httpx.AsyncClient(timeout=5.0) as client:
+                        res = await client.get(
+                            f'http://127.0.0.1:8081/api/places/nearby'
+                            f'?lat={lat}&lng={lng}&radius=20000')
+                        res.raise_for_status()
+                        all_places = res.json()
+
+                    q_lower = q.lower().strip()
+                    target_cat = CAT_KEYWORDS.get(q_lower)
+                    matched = [
+                        p for p in all_places
+                        if not p.get('is_separator') and (
+                            (target_cat and p.get('category') == target_cat)
+                            or q_lower in p.get('name', '').lower()
+                            or q_lower in (p.get('name_ja') or '').lower()
+                            or q_lower in p.get('address', '').lower()
+                        )
+                    ]
+
+                    suggestions_list.clear()
+                    if matched:
+                        suggestions_box.set_visibility(True)
+                        with suggestions_list:
+                            for place in matched:
+                                has_jp  = place.get('has_japanese_support', False)
+                                s_level = place.get('safety_level', 2)
+                                s_lbl, s_bg, s_tc = SAFETY_CONFIG.get(s_level, SAFETY_CONFIG[2])
+                                dist_m  = place.get('distance', 0)
+                                dist_str = f'{dist_m}m' if dist_m < 1000 else f'{dist_m/1000:.1f}km'
+                                p_name  = place.get('name', '')
+                                p_id    = place['id']
+
+                                with ui.card().classes(
+                                    'w-full p-2 cursor-pointer hover:bg-blue-50 '
+                                    'hover:shadow-md transition-all rounded-xl'
+                                ) as card:
+                                    card.on('click', lambda n=p_name: (
+                                        suggestions_box.set_visibility(False),
+                                        ui.navigate.to(f'/search?q={n}&lat={lat}&lng={lng}')
+                                    ))
+                                    with ui.row().classes('items-center gap-1 w-full flex-nowrap'):
+                                        with ui.column().classes('gap-1 flex-shrink-0 items-center'):
+                                            ui.html(
+                                                f'<span style="display:block;background:{s_bg};'
+                                                f'color:{s_tc};padding:2px 5px;border-radius:5px;'
+                                                f'font-size:9px;font-weight:bold;white-space:nowrap">'
+                                                f'{s_lbl}</span>'
+                                            )
+                                            ui.html(
+                                                f'<span style="display:block;background:{aqi_color};'
+                                                f'color:{aqi_tc};padding:2px 5px;border-radius:5px;'
+                                                f'font-size:9px;font-weight:bold;white-space:nowrap">'
+                                                f'{aqi_label}</span>'
+                                            )
+                                        if has_jp:
+                                            ui.html(
+                                                f'<div style="flex-shrink:0;width:22px;height:28px;'
+                                                f'display:flex;align-items:center;justify-content:center">'
+                                                f'{JP_WOMAN_SVG}</div>'
+                                            )
+                                        else:
+                                            ui.html('<div style="flex-shrink:0;width:22px"></div>')
+                                        ui.html(
+                                            f'<span style="color:#555;font-size:10px;'
+                                            f'flex-shrink:0;white-space:nowrap">📍{dist_str}</span>'
+                                        )
+                                        with ui.column().classes('flex-1 min-w-0 gap-0'):
+                                            ui.label(p_name).classes(
+                                                'font-semibold text-gray-800 text-xs leading-tight'
+                                            ).style('overflow:hidden;text-overflow:ellipsis;white-space:nowrap')
+                                            if place.get('address'):
+                                                ui.label(place['address']).classes(
+                                                    'text-gray-400 text-xs'
+                                                ).style('overflow:hidden;text-overflow:ellipsis;white-space:nowrap')
+                    else:
+                        suggestions_box.set_visibility(False)
                 except Exception as e:
                     print("Error autocomplete:", e)
-                    suggestions_box.classes(add='hidden')
+                    suggestions_box.set_visibility(False)
 
             async def on_input(e):
                 if search_state['task']:
@@ -71,11 +170,21 @@ async def home_page():
                         pass
                 search_state['task'] = asyncio.create_task(debounced())
 
-            search_input = ui.input(placeholder='Tìm địa điểm tập luyện...', on_change=on_input).classes('w-full').props('rounded outlined dense clearable')
+            with ui.row().classes('items-center w-full bg-white rounded-full px-3 py-1 gap-1').style(
+                'border:1.5px solid #d1d5db;box-shadow:0 1px 4px rgba(0,0,0,0.06)'
+            ):
+                ui.icon('search').classes('text-xl flex-shrink-0').style('color:#111;font-weight:900')
+                search_input = ui.input(
+                    placeholder='Tìm địa điểm tập luyện...',
+                    on_change=on_input
+                ).classes('flex-1').props('borderless dense clearable')
             search_input.on('keydown.enter', handle_search)
 
-            with ui.card().classes('absolute top-full left-0 w-full z-[9999] p-0 mt-1 shadow-lg bg-white hidden') as suggestions_box:
-                suggestions_list = ui.column().classes('w-full gap-0')
+            with ui.card().classes('absolute top-full left-0 w-full z-[9999] p-2 mt-1 shadow-xl bg-white').style(
+                'max-height:420px;overflow-y:auto;border-radius:12px'
+            ) as suggestions_box:
+                suggestions_list = ui.column().classes('w-full gap-1')
+            suggestions_box.set_visibility(False)
 
         with ui.row().classes('gap-3'):
             from components.aqi_button import add_aqi_button

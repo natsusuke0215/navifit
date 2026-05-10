@@ -42,9 +42,16 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
     place_name = place.get('name', '').replace("'", "\\'")
 
     # ── 2. Header ──────────────────────────────────────────────────────────────
-    with ui.header().classes('items-center bg-white text-black shadow-md px-4 py-3 gap-3'):
-        ui.button(icon='arrow_back', on_click=ui.navigate.back).props('flat round dense')
-        ui.label(place.get('name', '')).classes('text-lg font-bold flex-1 truncate')
+    with ui.header().classes('items-center bg-white text-black shadow-md px-4 py-3 justify-between'):
+        with ui.row().classes('items-center gap-2 flex-1 mr-4'):
+            ui.button(icon='arrow_back', on_click=ui.navigate.back).props('flat round dense')
+            with ui.row().classes('items-center flex-1 bg-gray-100 rounded-full px-3 py-1 gap-1'):
+                ui.icon('search').classes('text-xl').style('color:#111;font-weight:900')
+                detail_search = ui.input(
+                    placeholder='Tìm địa điểm tập luyện...'
+                ).props('borderless dense').classes('flex-1 text-sm bg-transparent')
+                detail_search.on('keydown.enter', lambda: ui.navigate.to(
+                    f'/search?q={detail_search.value}&lat={ulat}&lng={ulng}'))
         if place.get('has_japanese_support'):
             ui.badge('日本語対応').classes('bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full')
 

@@ -109,9 +109,16 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
 
     # ── Header ────────────────────────────────────────────────────────────────
     with ui.header().classes('items-center bg-white text-black shadow-md px-4 py-3 justify-between'):
-        with ui.row().classes('items-center'):
+        with ui.row().classes('items-center gap-2 flex-1 mr-4'):
             ui.button(icon='arrow_back', on_click=lambda: ui.navigate.to('/')).props('flat round dense')
-            ui.label('Tìm kiếm').classes('text-xl font-bold ml-2')
+            with ui.row().classes('items-center flex-1 bg-gray-100 rounded-full px-3 py-1 gap-1'):
+                ui.icon('search').classes('text-xl').style('color:#111;font-weight:900')
+                search_input = ui.input(
+                    value=q,
+                    placeholder='Tìm địa điểm tập luyện...'
+                ).props('borderless dense').classes('flex-1 text-sm bg-transparent')
+                search_input.on('keydown.enter', lambda: ui.navigate.to(
+                    f'/search?q={search_input.value}&lat={lat}&lng={lng}'))
         with ui.row().classes('items-center gap-2'):
             from components.aqi_button import add_aqi_button
             add_aqi_button('search-map')
@@ -133,9 +140,11 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
             ui.label(f'Kết quả: "{q}"' if q else 'Địa điểm xung quanh').classes('text-lg font-bold mb-3')
 
             results_container = ui.column().classes('w-full gap-1')
+            selected = {'card': None}  # card đang được chọn
 
             def render_places(pl: list):
                 results_container.clear()
+                selected['card'] = None  # reset khi render lại
                 real = [p for p in pl if not p.get('is_separator')]
                 with results_container:
                     if not real:
@@ -161,10 +170,19 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
                         dist_m = place.get('distance', 0)
                         dist_str = f'{dist_m}m' if dist_m < 1000 else f'{dist_m / 1000:.1f}km'
 
+                        SEL_ADD = 'bg-blue-100 shadow-md ring-2 ring-blue-400'
+                        SEL_REM = 'hover:bg-blue-50 hover:shadow-md'
+
                         with ui.card().classes(
                             'w-full p-2 cursor-pointer hover:bg-blue-50 hover:shadow-md transition-all rounded-xl'
                         ) as card:
-                            card.on('click', lambda pid=p_id: ui.run_javascript(f'highlightMarker({pid})'))
+                            async def _card_click(pid=p_id, c=card):
+                                if selected['card'] and selected['card'] != c:
+                                    selected['card'].classes(remove=SEL_ADD, add=SEL_REM)
+                                selected['card'] = c
+                                c.classes(remove=SEL_REM, add=SEL_ADD)
+                                await ui.run_javascript(f'highlightMarker({pid})')
+                            card.on('click', _card_click)
 
                             with ui.row().classes('items-center gap-2 w-full flex-nowrap'):
 
