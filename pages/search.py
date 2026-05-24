@@ -2,21 +2,76 @@ import httpx
 import json
 from nicegui import ui, app
 
+# SVG icon phụ nữ mặc kimono Nhật Bản
+JP_WOMAN_SVG = '''<svg width="22" height="28" viewBox="0 0 22 28" xmlns="http://www.w3.org/2000/svg">
+  <path d="M5 9 Q5 3 11 3 Q17 3 17 9 Q17 6 11 7.5 Q5 6 5 9Z" fill="#2d1b0e"/>
+  <ellipse cx="11" cy="9" rx="4.5" ry="5" fill="#f5cba7"/>
+  <circle cx="8" cy="4.5" r="1.3" fill="#c0392b"/>
+  <rect x="7.5" y="3.5" width="3" height="1" rx="0.5" fill="#c0392b"/>
+  <path d="M2 28 L6 14 L11 12 L16 14 L20 28Z" fill="#c0392b"/>
+  <path d="M9 13.5 L11 12 L13 13.5 L11 21Z" fill="white"/>
+  <rect x="6" y="18.5" width="10" height="2.5" rx="1.25" fill="#8B0000"/>
+  <rect x="15" y="17.5" width="4" height="4" rx="1" fill="#8B0000"/>
+</svg>'''
+
+SAFETY_CONFIG = {
+    1: ('安全',       '#4CAF50', 'white'),
+    2: ('まあ安全',    '#FFC107', '#333'),
+    3: ('かなり安全',  '#FF9800', 'white'),
+    4: ('危険',       '#F44336', 'white'),
+}
+
+def aqi_to_badge(aqi_value: int) -> tuple:
+    if aqi_value <= 50:
+        return 'AQI いい', '#4CAF50', 'white'
+    elif aqi_value <= 100:
+        return 'AQI 普通', '#FFC107', '#333'
+    elif aqi_value <= 150:
+        return 'AQI 悪い', '#FF9800', 'white'
+    else:
+        return 'AQI 最悪', '#F44336', 'white'
+
+
 @ui.page('/search')
 async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.843058):
     ui.page_title('NaviFit — Tìm kiếm')
 
-    # Đọc trạng thái filter, đảm bảo luôn là bool
     japanese_filter = bool(app.storage.user.get('japanese_only', False))
+
+    # Lấy AQI một lần cho toàn khu vực
+    aqi_label, aqi_color, aqi_text_color = 'AQI いい', '#4CAF50', 'white'
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            aqi_res = await client.get(f'http://127.0.0.1:8081/api/aqi?lat={lat}&lng={lng}')
+            if aqi_res.status_code == 200:
+                aqi_data = aqi_res.json()
+                aqi_label, aqi_color, aqi_text_color = aqi_to_badge(aqi_data.get('aqi_value', 0))
+    except Exception:
+        pass
 
     CAT_LABELS = {
         'gym': '🏋️ Phòng gym',
         'park': '🌳 Công viên',
         'pool': '🏊 Hồ bơi',
         'badminton': '🏸 Cầu lông',
+        'tennis': '🎾 Tennis',
+        'pickleball': '🏓 Pickleball',
+        'hospital': '🏥 Bệnh viện',
+        'police': '👮 Công an',
     }
 
-    # Lấy dữ liệu ban đầu
+    # Từ khóa → category
+    CAT_KEYWORDS = {
+        'gym': 'gym', 'phòng gym': 'gym', 'phòng tập': 'gym', 'thể hình': 'gym', 'fitness': 'gym',
+        'park': 'park', 'công viên': 'park', 'vườn hoa': 'park',
+        'pool': 'pool', 'hồ bơi': 'pool', 'bể bơi': 'pool', 'bơi': 'pool',
+        'badminton': 'badminton', 'cầu lông': 'badminton', 'sân cầu': 'badminton',
+        'tennis': 'tennis', 'sân tennis': 'tennis',
+        'pickleball': 'pickleball', 'sân pickleball': 'pickleball', 'pickball': 'pickleball',
+        'hospital': 'hospital', 'bệnh viện': 'hospital',
+        'police': 'police', 'công an': 'police', 'trụ sở công an': 'police', 'đồn công an': 'police',
+    }
+
     async def fetch_places(japanese_only: bool = False) -> list:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -27,146 +82,193 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
                 all_places = res.json()
 
                 if q:
-                    q_lower = q.lower()
+                    q_lower = q.lower().strip()
+                    # Kiểm tra query có khớp category không
+                    target_cat = CAT_KEYWORDS.get(q_lower)
+
                     matched = []
                     for p in all_places:
                         if p.get('is_separator'):
                             continue
-                        if (q_lower in p.get('name','').lower()
-                                or q_lower in (p.get('name_ja') or '').lower()
-                                or q_lower in p.get('address','').lower()):
+                        if japanese_only and not p.get('has_japanese_support'):
+                            continue
+                        # Khớp theo category keyword hoặc tên/địa chỉ
+                        by_cat  = target_cat and p.get('category') == target_cat
+                        by_text = (q_lower in p.get('name', '').lower()
+                                   or q_lower in (p.get('name_ja') or '').lower()
+                                   or q_lower in p.get('address', '').lower())
+                        if by_cat or by_text:
                             matched.append(p)
+                    return matched
 
-                    if matched:
-                        # Xác định category đầu tiên trong kết quả
-                        primary_cat = matched[0].get('category', '')
-                        matched_ids = {p['id'] for p in matched}
-
-                        # Lấy các địa điểm cùng category, chưa có trong kết quả
-                        similar = [
-                            p for p in all_places
-                            if not p.get('is_separator')
-                            and p.get('category') == primary_cat
-                            and p['id'] not in matched_ids
-                        ]
-
-                        result = list(matched)
-                        if similar:
-                            cat_label = CAT_LABELS.get(primary_cat, 'cùng loại')
-                            result.append({'is_separator': True, 'label': f'── Địa điểm {cat_label} khác ──'})
-                            result.extend(similar)
-                        return result
-                    return matched  # không có kết quả
-
-                return all_places  # không có query
+                # Không có query: lọc JP nếu cần, bỏ separator từ service
+                return [p for p in all_places if not p.get('is_separator')]
         except httpx.HTTPStatusError as e:
             ui.notify(f'Lỗi server: {e.response.status_code}', type='negative')
         except httpx.RequestError:
-            ui.notify('Không thể kết nối server. Kiểm tra kết nối mạng.', type='negative')
+            ui.notify('Không thể kết nối server.', type='negative')
         except Exception as e:
             ui.notify(f'Lỗi: {str(e)}', type='negative')
         return []
 
     places = await fetch_places(japanese_filter)
-    # Chỉ lấy place thực sự (không phải separator) để vẽ map
     real_places = [p for p in places if not p.get('is_separator')]
     places_json = json.dumps(real_places)
 
     # ── Header ────────────────────────────────────────────────────────────────
     with ui.header().classes('items-center bg-white text-black shadow-md px-4 py-3 justify-between'):
-        with ui.row().classes('items-center'):
-            ui.button(icon='arrow_back', on_click=lambda: ui.navigate.to('/')).props('flat round dense')
-            ui.label('Tìm kiếm').classes('text-xl font-bold ml-2')
+        with ui.row().classes('items-center gap-2 flex-1 mr-4'):
+            ui.html('<a href="/"><img src="/static/Logo.png" style="height:40px;width:auto;display:block;cursor:pointer;flex-shrink:0"></a>')
+            with ui.row().classes('items-center flex-1 bg-gray-100 rounded-full px-3 py-1 gap-1'):
+                ui.icon('search').classes('text-xl').style('color:#111;font-weight:900')
+                search_input = ui.input(
+                    value=q,
+                    placeholder='Tìm địa điểm tập luyện...'
+                ).props('borderless dense').classes('flex-1 text-sm bg-transparent')
+                search_input.on('keydown.enter', lambda: ui.navigate.to(
+                    f'/search?q={search_input.value}&lat={lat}&lng={lng}'))
         with ui.row().classes('items-center gap-2'):
             from components.aqi_button import add_aqi_button
             add_aqi_button('search-map')
 
+            # Nút lọc tiếng Nhật ở header (số 5 trong mockup)
+            jp_active_cls   = 'bg-green-600 text-white'
+            jp_inactive_cls = 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            jp_base_cls = 'text-xs font-bold px-3 py-1 rounded-full cursor-pointer select-none border-0 transition-colors'
+            jp_header_btn = ui.label('日本語対応').classes(
+                f'{jp_base_cls} {jp_active_cls if japanese_filter else jp_inactive_cls}'
+            )
+
     # ── Layout chính ──────────────────────────────────────────────────────────
     with ui.row().classes('w-full h-[calc(100vh-64px)] m-0 p-0 overflow-hidden flex-nowrap'):
 
-        # ── Cột trái: Danh sách (33%) ─────────────────────────────────────────
+        # ── Cột trái: Danh sách ───────────────────────────────────────────────
         with ui.column().classes('w-1/3 h-full overflow-y-auto p-4 border-r bg-gray-50 flex-shrink-0 gap-0'):
 
-            # Tiêu đề + toggle filter
-            ui.label(f'Kết quả: "{q}"' if q else 'Địa điểm xung quanh').classes('text-lg font-bold mb-2')
+            ui.label(f'Kết quả: "{q}"' if q else 'Địa điểm xung quanh').classes('text-lg font-bold mb-3')
 
-            with ui.row().classes('items-center gap-2 mb-3'):
-                ui.label('Bộ lọc:').classes('text-xs text-gray-500')
-                filter_switch = ui.switch('日本語対応のみ', value=japanese_filter).classes('text-xs')
-
-            # Container chứa danh sách kết quả (có thể clear & reload)
-            results_container = ui.column().classes('w-full gap-2')
+            results_container = ui.column().classes('w-full gap-1')
+            selected = {'card': None}  # card đang được chọn
 
             def render_places(pl: list):
-                """Render danh sách places vào results_container"""
                 results_container.clear()
+                selected['card'] = None  # reset khi render lại
                 real = [p for p in pl if not p.get('is_separator')]
                 with results_container:
                     if not real:
                         with ui.column().classes('items-center p-8 text-gray-400 gap-2 w-full'):
                             ui.label('🔍').classes('text-4xl')
                             ui.label('Không tìm thấy địa điểm nào').classes('font-medium text-gray-500')
-                            ui.label('Thử tìm kiếm với từ khóa khác hoặc mở rộng khu vực tìm kiếm').classes('text-sm text-center text-gray-400')
+                            ui.label('Thử tìm kiếm với từ khóa khác').classes('text-sm text-center text-gray-400')
                         return
 
                     for place in pl:
-                        # Separator label
                         if place.get('is_separator'):
-                            ui.label(place.get('label', '──')).classes('text-gray-400 text-xs text-center py-1 w-full')
+                            ui.label(place.get('label', '──')).classes(
+                                'text-gray-400 text-xs text-center py-2 w-full')
                             continue
 
-                        # Badge tiếng Nhật
                         has_jp = place.get('has_japanese_support', False)
-                        badge_text = '日本語対応' if has_jp else '日本語なし'
-                        badge_cls = 'bg-blue-100 text-blue-700 border border-blue-200' if has_jp else 'bg-gray-100 text-gray-400'
+                        safety_level = place.get('safety_level', 2)
+                        safety_lbl, safety_bg, safety_tc = SAFETY_CONFIG.get(safety_level, SAFETY_CONFIG[2])
 
-                        p_id = place['id']
-                        p_lat = place['lat']
-                        p_lng = place['lng']
+                        p_id   = place['id']
+                        p_lat  = place['lat']
+                        p_lng  = place['lng']
+                        dist_m = place.get('distance', 0)
+                        dist_str = f'{dist_m}m' if dist_m < 1000 else f'{dist_m / 1000:.1f}km'
 
-                        with ui.card().classes('w-full p-3 cursor-pointer hover:bg-blue-50 hover:shadow-md transition-all rounded-xl') as card:
-                            card.on('mouseover', lambda pid=p_id: ui.run_javascript(f'highlightMarker({pid})'))
-                            card.on('click', lambda pid=p_id, plat=p_lat, plng=p_lng: [
-                                ui.run_javascript(f'highlightMarker({pid})'),
-                            ])
+                        SEL_ADD = 'bg-blue-100 shadow-md ring-2 ring-blue-400'
+                        SEL_REM = 'hover:bg-blue-50 hover:shadow-md'
 
-                            with ui.row().classes('items-start justify-between gap-2 w-full'):
-                                with ui.column().classes('flex-1 gap-0'):
-                                    ui.label(place.get('name', '')).classes('font-semibold text-gray-800 leading-tight text-sm')
-                                    if place.get('name_ja'):
-                                        ui.label(place['name_ja']).classes('text-gray-400 text-xs')
-                                    with ui.row().classes('gap-3 mt-1 items-center'):
-                                        ui.label(f"📍 {round(place.get('distance', 0)/1000, 1)} km").classes('text-xs text-gray-500')
-                                        ui.label(f"⭐ {place.get('rating','N/A')}").classes('text-xs text-yellow-600 font-bold')
-                                with ui.column().classes('items-end gap-1 flex-shrink-0'):
-                                    ui.badge(badge_text).classes(f'text-xs px-2 py-0.5 rounded-full {badge_cls}')
-                                    # Nút xem chi tiết
-                                    ui.link('Chi tiết →', target=f'/detail/{p_id}').classes('text-blue-500 text-xs font-medium no-underline hover:underline')
+                        with ui.card().classes(
+                            'w-full p-2 cursor-pointer hover:bg-blue-50 hover:shadow-md transition-all rounded-xl'
+                        ) as card:
+                            async def _card_click(pid=p_id, c=card):
+                                if selected['card'] and selected['card'] != c:
+                                    selected['card'].classes(remove=SEL_ADD, add=SEL_REM)
+                                selected['card'] = c
+                                c.classes(remove=SEL_REM, add=SEL_ADD)
+                                await ui.run_javascript(f'highlightMarker({pid})')
+                            card.on('click', _card_click)
+
+                            with ui.row().classes('items-center gap-2 w-full flex-nowrap'):
+
+                                # Cột badges (an toàn + AQI, xếp dọc)
+                                with ui.column().classes('gap-1 flex-shrink-0 items-center'):
+                                    ui.html(
+                                        f'<span style="display:block;background:{safety_bg};color:{safety_tc};'
+                                        f'padding:2px 7px;border-radius:5px;font-size:10px;font-weight:bold;'
+                                        f'white-space:nowrap;text-align:center">{safety_lbl}</span>'
+                                    )
+                                    ui.html(
+                                        f'<span style="display:block;background:{aqi_color};color:{aqi_text_color};'
+                                        f'padding:2px 7px;border-radius:5px;font-size:10px;font-weight:bold;'
+                                        f'white-space:nowrap;text-align:center">{aqi_label}</span>'
+                                    )
+
+                                # Icon phụ nữ Nhật (hiện nếu có hỗ trợ tiếng Nhật)
+                                if has_jp:
+                                    ui.html(
+                                        f'<div style="flex-shrink:0;width:24px;height:30px;'
+                                        f'display:flex;align-items:center;justify-content:center">'
+                                        f'{JP_WOMAN_SVG}</div>'
+                                    )
+                                else:
+                                    ui.html('<div style="flex-shrink:0;width:24px"></div>')
+
+                                # Khoảng cách
+                                ui.html(
+                                    f'<span style="color:#555;font-size:11px;flex-shrink:0;white-space:nowrap">'
+                                    f'📍 {dist_str}</span>'
+                                )
+
+                                # Tên + địa chỉ
+                                with ui.column().classes('flex-1 min-w-0 gap-0'):
+                                    ui.label(place.get('name', '')).classes(
+                                        'font-semibold text-gray-800 text-sm leading-tight'
+                                    ).style('overflow:hidden;text-overflow:ellipsis;white-space:nowrap')
+                                    if place.get('address'):
+                                        ui.label(place['address']).classes('text-gray-400 text-xs').style(
+                                            'overflow:hidden;text-overflow:ellipsis;white-space:nowrap')
+
+                                # Link chi tiết
+                                ui.link('→', target=f'/detail/{p_id}').classes(
+                                    'text-blue-500 font-bold text-sm flex-shrink-0 no-underline')
 
             render_places(places)
 
-            # ── Handler filter switch ──────────────────────────────────────────
-            async def on_filter_change(e):
-                is_jp = bool(e.args)
-                app.storage.user['japanese_only'] = is_jp
+            # ── Handler toggle Japanese filter ────────────────────────────────
+            async def toggle_jp_filter():
+                nonlocal japanese_filter
+                japanese_filter = not japanese_filter
+                app.storage.user['japanese_only'] = japanese_filter
 
-                new_places = await fetch_places(is_jp)
+                if japanese_filter:
+                    jp_header_btn.classes(remove=jp_inactive_cls)
+                    jp_header_btn.classes(add=jp_active_cls)
+                else:
+                    jp_header_btn.classes(remove=jp_active_cls)
+                    jp_header_btn.classes(add=jp_inactive_cls)
+
+                new_places = await fetch_places(japanese_filter)
                 render_places(new_places)
-
-                # Cập nhật markers trên map (chỉ real places)
                 new_real = [p for p in new_places if not p.get('is_separator')]
                 await ui.run_javascript(f'updateMapMarkers({json.dumps(new_real)})')
 
-            filter_switch.on('update:model-value', on_filter_change)
+            jp_header_btn.on('click', toggle_jp_filter)
 
-        # ── Cột phải: Bản đồ (67%) ────────────────────────────────────────────
+        # ── Cột phải: Bản đồ ──────────────────────────────────────────────────
         with ui.column().classes('w-2/3 h-full p-4 flex-grow relative bg-white'):
             ui.add_head_html('''
                 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
                 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
             ''')
-            ui.html('<div id="route-info" style="padding:8px 12px;font-size:13px;color:#1565C0;background:#E3F2FD;border-radius:8px;margin-bottom:6px;font-weight:600;">Đang tải bản đồ...</div>')
-            ui.html('<div id="search-map" style="height:calc(100vh - 150px);width:100%;border-radius:12px;box-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1);"></div>').classes('w-full')
+            ui.html('<div id="route-info" style="padding:8px 12px;font-size:13px;color:#1565C0;'
+                    'background:#E3F2FD;border-radius:8px;margin-bottom:6px;font-weight:600;">'
+                    'Đang tải bản đồ...</div>')
+            ui.html('<div id="search-map" style="height:calc(100vh - 150px);width:100%;'
+                    'border-radius:12px;box-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1);"></div>').classes('w-full')
 
             ui.add_body_html(f'''
             <script>
@@ -186,29 +288,49 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
                 window.currentDestLat = null;
                 window.currentDestLng = null;
 
-                // Marker vị trí user
                 window.userMarker = L.circleMarker([window.userLat, window.userLng], {{
                     radius: 8, color: '#4285F4', fillColor: '#4285F4', fillOpacity: 1, zIndexOffset: 1000
                 }}).addTo(searchMap).bindPopup('Vị trí của bạn');
 
-                // Markers địa điểm
                 window.markers = {{}};
                 window.currentRouteLayer = null;
                 window.places = {places_json};
 
+                var CATEGORY_ICON = {{
+                    'gym':        {{ emoji: '🏋️', bg: '#E3F2FD', border: '#1976D2' }},
+                    'park':       {{ emoji: '🌳', bg: '#E8F5E9', border: '#388E3C' }},
+                    'pool':       {{ emoji: '🏊', bg: '#E0F7FA', border: '#0097A7' }},
+                    'badminton':  {{ emoji: '🏸', bg: '#FFF3E0', border: '#F57C00' }},
+                    'tennis':     {{ emoji: '🎾', bg: '#F3E5F5', border: '#7B1FA2' }},
+                    'pickleball': {{ emoji: '🏓', bg: '#FFF8E1', border: '#F9A825' }},
+                    'hospital':   {{ emoji: '🏥', bg: '#FFEBEE', border: '#C62828' }},
+                    'police':     {{ emoji: '👮', bg: '#E8EAF6', border: '#283593' }}
+                }};
+
+                function makePlaceIcon(category) {{
+                    var cfg = CATEGORY_ICON[category] || {{ emoji: '📍', bg: '#F5F5F5', border: '#9E9E9E' }};
+                    var html = '<div style="width:36px;height:36px;background:' + cfg.bg +
+                               ';border:2.5px solid ' + cfg.border +
+                               ';border-radius:50% 50% 50% 0;transform:rotate(-45deg);' +
+                               'display:flex;align-items:center;justify-content:center;' +
+                               'box-shadow:0 2px 6px rgba(0,0,0,0.25);">' +
+                               '<span style="transform:rotate(45deg);font-size:18px;line-height:1;">' +
+                               cfg.emoji + '</span></div>';
+                    return L.divIcon({{
+                        className: '',
+                        html: html,
+                        iconSize: [36, 36],
+                        iconAnchor: [18, 36],
+                        popupAnchor: [0, -36]
+                    }});
+                }}
+
                 function addMarkers(places) {{
-                    // Xóa markers cũ
-                    for (var k in window.markers) {{
-                        searchMap.removeLayer(window.markers[k]);
-                    }}
+                    for (var k in window.markers) {{ searchMap.removeLayer(window.markers[k]); }}
                     window.markers = {{}};
                     window.places = places;
                     places.forEach(function(p) {{
-                        var color = p.has_japanese_support ? '#1565C0' : '#607D8B';
-                        var icon = L.divIcon({{
-                            html: `<div style="background:${{color}};width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,.3)"></div>`,
-                            iconSize:[12,12], iconAnchor:[6,6], className:''
-                        }});
+                        var icon = makePlaceIcon(p.category);
                         window.markers[p.id] = L.marker([p.lat, p.lng], {{icon: icon}})
                             .addTo(searchMap)
                             .bindPopup(`<div style="font-family:sans-serif;min-width:140px">
@@ -221,15 +343,11 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
                 }}
                 addMarkers(window.places);
 
-                // Hàm cập nhật markers khi filter thay đổi
                 window.updateMapMarkers = function(newPlaces) {{
                     addMarkers(newPlaces);
-                    if (newPlaces.length > 0) {{
-                        window.drawRoute(newPlaces[0].lat, newPlaces[0].lng);
-                    }}
+                    if (newPlaces.length > 0) window.drawRoute(newPlaces[0].lat, newPlaces[0].lng);
                 }};
 
-                // Vẽ route OSRM
                 window.drawRoute = async function(destLat, destLng) {{
                     window.currentDestLat = destLat;
                     window.currentDestLng = destLng;
@@ -260,7 +378,6 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
                     document.getElementById('route-info').innerHTML = 'Không có địa điểm để vẽ đường.';
                 }}
 
-                // Highlight marker khi hover/click card
                 window.highlightMarker = function(placeId) {{
                     if (window.markers[placeId]) {{
                         window.markers[placeId].openPopup();
@@ -268,9 +385,6 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
                         if (p) window.drawRoute(p.lat, p.lng);
                     }}
                 }};
-
-                // Vị trí người dùng cố định tại B1 HUST (không dùng GPS)
-                // window.userLat và window.userLng đã được set từ Python f-string ở trên
             }}
             setTimeout(initSearchMap, 100);
             </script>

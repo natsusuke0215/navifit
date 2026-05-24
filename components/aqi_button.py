@@ -25,7 +25,7 @@ def add_aqi_scripts():
                 radius: 3000, 
                 color: color, 
                 fillColor: color, 
-                fillOpacity: 0.25, 
+                fillOpacity: 0.07, 
                 weight: 1,
                 interactive: false
             }).addTo(mapObj);

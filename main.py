@@ -38,6 +38,9 @@ fastapi_app.include_router(sos_router)
 # Mount FastAPI app vào NiceGUI app tại đường dẫn /api
 nicegui_app.mount('/api', fastapi_app)
 
+# Serve static files (logo, ảnh...)
+nicegui_app.add_static_files('/static', 'static')
+
 # 3. Cấu trúc trang NiceGUI
 def header():
     """Header component dùng chung"""

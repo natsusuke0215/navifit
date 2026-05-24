@@ -28,6 +28,7 @@ async def get_nearby_places(
             "rating": p.rating, "category": p.category.value,
             "is_indoor": p.is_indoor, "has_japanese_support": p.has_japanese_support,
             "distance": p.distance, "is_priority": getattr(p, "is_priority", False),
+            "safety_level": p.safety_level if hasattr(p, "safety_level") else 2,
             "is_separator": False,
         })
     return result
