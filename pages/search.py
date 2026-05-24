@@ -72,7 +72,7 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
         'police': 'police', 'công an': 'police', 'trụ sở công an': 'police', 'đồn công an': 'police',
     }
 
-    async def fetch_places(japanese_only: bool = False) -> list:
+    async def fetch_places(japanese_only: bool = False) -> tuple:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 japanese_str = 'true' if japanese_only else 'false'
@@ -81,39 +81,62 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
                 res.raise_for_status()
                 all_places = res.json()
 
+                all_real = [p for p in all_places
+                            if not p.get('is_separator')
+                            and (not japanese_only or p.get('has_japanese_support'))]
+
                 if q:
                     q_lower = q.lower().strip()
-                    # Kiểm tra query có khớp category không
                     target_cat = CAT_KEYWORDS.get(q_lower)
 
                     matched = []
-                    for p in all_places:
-                        if p.get('is_separator'):
-                            continue
-                        if japanese_only and not p.get('has_japanese_support'):
-                            continue
-                        # Khớp theo category keyword hoặc tên/địa chỉ
+                    for p in all_real:
                         by_cat  = target_cat and p.get('category') == target_cat
                         by_text = (q_lower in p.get('name', '').lower()
                                    or q_lower in (p.get('name_ja') or '').lower()
                                    or q_lower in p.get('address', '').lower())
                         if by_cat or by_text:
                             matched.append(p)
-                    return matched
 
-                # Không có query: lọc JP nếu cần, bỏ separator từ service
-                return [p for p in all_places if not p.get('is_separator')]
+                    suggestions = []
+                    if matched:
+                        cat = matched[0].get('category')
+                        if cat:
+                            matched_ids = {p['id'] for p in matched}
+                            suggestions = [p for p in all_real
+                                           if p.get('category') == cat
+                                           and p['id'] not in matched_ids][:6]
+                    return matched, suggestions
+
+                return all_real, []
         except httpx.HTTPStatusError as e:
             ui.notify(f'Lỗi server: {e.response.status_code}', type='negative')
         except httpx.RequestError:
             ui.notify('Không thể kết nối server.', type='negative')
         except Exception as e:
             ui.notify(f'Lỗi: {str(e)}', type='negative')
-        return []
+        return [], []
 
-    places = await fetch_places(japanese_filter)
-    real_places = [p for p in places if not p.get('is_separator')]
-    places_json = json.dumps(real_places)
+    places, suggestions = await fetch_places(japanese_filter)
+
+    CAT_DISPLAY = {
+        'gym': 'phòng gym', 'park': 'công viên', 'pool': 'hồ bơi',
+        'badminton': 'sân cầu lông', 'tennis': 'sân tennis',
+        'pickleball': 'sân pickleball', 'hospital': 'bệnh viện', 'police': 'công an',
+    }
+
+    def build_display(matched: list, suggs: list) -> list:
+        result = list(matched)
+        if suggs:
+            cat = matched[0].get('category', '') if matched else ''
+            lbl = f"Một số {CAT_DISPLAY.get(cat, 'địa điểm')} khác"
+            result.append({'is_separator': True, 'label': lbl})
+            result.extend(suggs)
+        return result
+
+    display_places = build_display(places, suggestions)
+    all_map_places = places + suggestions
+    places_json = json.dumps(all_map_places)
 
     # ── Header ────────────────────────────────────────────────────────────────
     with ui.header().classes('items-center bg-white text-black shadow-md px-4 py-3 justify-between'):
@@ -236,7 +259,7 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
                                 ui.link('→', target=f'/detail/{p_id}').classes(
                                     'text-blue-500 font-bold text-sm flex-shrink-0 no-underline')
 
-            render_places(places)
+            render_places(display_places)
 
             # ── Handler toggle Japanese filter ────────────────────────────────
             async def toggle_jp_filter():
@@ -251,10 +274,9 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
                     jp_header_btn.classes(remove=jp_active_cls)
                     jp_header_btn.classes(add=jp_inactive_cls)
 
-                new_places = await fetch_places(japanese_filter)
-                render_places(new_places)
-                new_real = [p for p in new_places if not p.get('is_separator')]
-                await ui.run_javascript(f'updateMapMarkers({json.dumps(new_real)})')
+                new_matched, new_suggestions = await fetch_places(japanese_filter)
+                render_places(build_display(new_matched, new_suggestions))
+                await ui.run_javascript(f'updateMapMarkers({json.dumps(new_matched + new_suggestions)})')
 
             jp_header_btn.on('click', toggle_jp_filter)
 
