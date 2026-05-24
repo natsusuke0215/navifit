@@ -192,8 +192,9 @@ async def home_page():
 
         with ui.row().classes('gap-3'):
             from components.aqi_button import add_aqi_button
+            from components.safety_button import add_safety_button
             add_aqi_button('map')
-            ui.button('安全 (An toàn)', on_click=lambda: ui.navigate.to('/safe-area')).props('outline rounded color=green text-color=green')
+            add_safety_button('map')
 
     # Nhúng Leaflet CSS & JS
     ui.add_head_html('''
@@ -263,6 +264,8 @@ async def home_page():
                 var places = await res.json();
                 window.map_places = places;
                 places.forEach(function(place) {
+                    // Ẩn cảnh sát/bệnh viện mặc định — chỉ hiện khi bật nút An toàn (vùng vuông nét đứt)
+                    if (place.category === 'police' || place.category === 'hospital') return;
                     var icon = makePlaceIcon(place.category);
                     var japanBadge = place.has_japanese_support
                         ? '<span style="background:#E3F2FD;color:#1565C0;border:1px solid #90CAF9;border-radius:4px;padding:2px 6px;font-size:11px;font-weight:bold;">🇯🇵 日本語対応</span>'
