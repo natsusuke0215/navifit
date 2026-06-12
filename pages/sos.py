@@ -17,7 +17,7 @@ async def sos_page():
         # Danh sách kênh
         channels = []
         try:
-            resp = await httpx.AsyncClient(timeout=10.0).get('http://127.0.0.1:8081/api/sos/channels')
+            resp = await httpx.AsyncClient(timeout=10.0).get('http://127.0.0.1:8080/api/sos/channels')
             resp.raise_for_status()
             channels = resp.json()
         except httpx.HTTPStatusError as e:

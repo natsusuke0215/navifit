@@ -11,10 +11,10 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
     best_times = []
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            r1 = await client.get(f'http://127.0.0.1:8081/api/places/{place_id}/detail')
+            r1 = await client.get(f'http://127.0.0.1:8080/api/places/{place_id}/detail')
             r1.raise_for_status()
             place = r1.json()
-            r2 = await client.get(f'http://127.0.0.1:8081/api/places/{place_id}/best-times?type=week')
+            r2 = await client.get(f'http://127.0.0.1:8080/api/places/{place_id}/best-times?type=week')
             if r2.status_code == 200:
                 best_times = r2.json()
     except httpx.HTTPStatusError as e:
@@ -153,7 +153,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
                 day_index = e.args.get('dataIndex', 0)
                 try:
                     async with httpx.AsyncClient(timeout=10.0) as cl:
-                        r = await cl.get(f'http://127.0.0.1:8081/api/places/{place_id}/best-times?type=day&day_of_week={day_index}')
+                        r = await cl.get(f'http://127.0.0.1:8080/api/places/{place_id}/best-times?type=day&day_of_week={day_index}')
                         day_data = r.json()
                 except Exception:
                     return
@@ -193,7 +193,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
             async def load_reviews(page: int = 1):
                 try:
                     async with httpx.AsyncClient(timeout=10.0) as cl:
-                        r = await cl.get(f'http://127.0.0.1:8081/api/places/{place_id}/reviews?page={page}&limit=10')
+                        r = await cl.get(f'http://127.0.0.1:8080/api/places/{place_id}/reviews?page={page}&limit=10')
                         data = r.json()
                 except Exception:
                     return {'reviews': [], 'total': 0, 'page': 1, 'total_pages': 1}
@@ -238,7 +238,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
                     return
                 try:
                     async with httpx.AsyncClient(timeout=10.0) as cl:
-                        await cl.post(f'http://127.0.0.1:8081/api/places/{place_id}/reviews', json={
+                        await cl.post(f'http://127.0.0.1:8080/api/places/{place_id}/reviews', json={
                             'user_name': name_input.value.strip(),
                             'rating': rating_radio.value,
                             'comment': comment_input.value.strip()
@@ -265,7 +265,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
         try:
             async with httpx.AsyncClient(timeout=10.0) as cl:
                 r_similar = await cl.get(
-                    f'http://127.0.0.1:8081/api/places/nearby?lat={ulat}&lng={ulng}&radius=20000'
+                    f'http://127.0.0.1:8080/api/places/nearby?lat={ulat}&lng={ulng}&radius=20000'
                 )
                 if r_similar.status_code == 200:
                     all_nearby = r_similar.json()

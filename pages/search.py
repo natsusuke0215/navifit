@@ -42,7 +42,7 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
     aqi_label, aqi_color, aqi_text_color = 'AQI いい', '#4CAF50', 'white'
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            aqi_res = await client.get(f'http://127.0.0.1:8081/api/aqi?lat={lat}&lng={lng}')
+            aqi_res = await client.get(f'http://127.0.0.1:8080/api/aqi?lat={lat}&lng={lng}')
             if aqi_res.status_code == 200:
                 aqi_data = aqi_res.json()
                 aqi_label, aqi_color, aqi_text_color = aqi_to_badge(aqi_data.get('aqi_value', 0))
@@ -76,7 +76,7 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 japanese_str = 'true' if japanese_only else 'false'
-                url = f'http://127.0.0.1:8081/api/places/nearby?lat={lat}&lng={lng}&radius=20000&japanese_only={japanese_str}'
+                url = f'http://127.0.0.1:8080/api/places/nearby?lat={lat}&lng={lng}&radius=20000&japanese_only={japanese_str}'
                 res = await client.get(url)
                 res.raise_for_status()
                 all_places = res.json()
