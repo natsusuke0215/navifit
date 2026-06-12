@@ -1,14 +1,14 @@
 import httpx
 from nicegui import ui
 
-def add_sos_button():
+def add_sos_button(base_url: str = ''):
     dialog = ui.dialog()
-    
+
     with dialog, ui.card().classes('w-full max-w-md p-4 bg-white rounded-2xl'):
         with ui.row().classes('items-center justify-between w-full mb-2'):
             ui.label('緊急連絡').classes('text-xl font-bold text-red-600')
             ui.button(icon='close', on_click=dialog.close).props('flat round dense text-color=gray')
-        
+
         ui.label('状況に応じて適切な連絡先を選択してください').classes('text-gray-500 text-sm mb-4')
         container = ui.column().classes('w-full gap-3')
 
@@ -17,9 +17,9 @@ def add_sos_button():
         with container:
             ui.spinner(size='lg').classes('self-center')
         dialog.open()
-        
+
         try:
-            resp = await httpx.AsyncClient().get('http://127.0.0.1:8081/api/sos/channels')
+            resp = await httpx.AsyncClient(base_url=base_url).get('/api/sos/channels')
             if resp.status_code == 200:
                 channels = resp.json()
             else:

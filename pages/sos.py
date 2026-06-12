@@ -1,8 +1,9 @@
 import httpx
 from nicegui import ui
+from fastapi import Request
 
 @ui.page('/sos')
-async def sos_page():
+async def sos_page(request: Request):
     ui.page_title('NaviFit — 緊急連絡')
     ICON_MAP = {"police":"🚔", "hospital":"🏥", "embassy":"🏛️", "other":"📞"}
 
@@ -17,7 +18,7 @@ async def sos_page():
         # Danh sách kênh
         channels = []
         try:
-            resp = await httpx.AsyncClient(timeout=10.0).get('http://127.0.0.1:8081/api/sos/channels')
+            resp = await httpx.AsyncClient(base_url=str(request.base_url), timeout=10.0).get('/api/sos/channels')
             resp.raise_for_status()
             channels = resp.json()
         except httpx.HTTPStatusError as e:

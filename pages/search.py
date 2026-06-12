@@ -1,6 +1,7 @@
 import httpx
 import json
 from nicegui import ui, app
+from fastapi import Request
 
 # SVG icon phụ nữ mặc kimono Nhật Bản
 JP_WOMAN_SVG = '''<svg width="22" height="28" viewBox="0 0 22 28" xmlns="http://www.w3.org/2000/svg">
@@ -33,7 +34,7 @@ def aqi_to_badge(aqi_value: int) -> tuple:
 
 
 @ui.page('/search')
-async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.843058, gps: int = 0):
+async def search_page(request: Request, q: str = '', lat: float = 21.006847, lng: float = 105.843058, gps: int = 0):
     ui.page_title('NaviFit — Tìm kiếm')
 
     japanese_filter = bool(app.storage.user.get('japanese_only', False))
@@ -41,8 +42,8 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
     # Lấy AQI một lần cho toàn khu vực
     aqi_label, aqi_color, aqi_text_color = 'AQI いい', '#4CAF50', 'white'
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            aqi_res = await client.get(f'http://127.0.0.1:8081/api/aqi?lat={lat}&lng={lng}')
+        async with httpx.AsyncClient(base_url=str(request.base_url), timeout=5.0) as client:
+            aqi_res = await client.get(f'/api/aqi?lat={lat}&lng={lng}')
             if aqi_res.status_code == 200:
                 aqi_data = aqi_res.json()
                 aqi_label, aqi_color, aqi_text_color = aqi_to_badge(aqi_data.get('aqi_value', 0))
@@ -74,9 +75,9 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
 
     async def fetch_places(japanese_only: bool = False) -> tuple:
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(base_url=str(request.base_url), timeout=10.0) as client:
                 japanese_str = 'true' if japanese_only else 'false'
-                url = f'http://127.0.0.1:8081/api/places/nearby?lat={lat}&lng={lng}&radius=20000&japanese_only={japanese_str}'
+                url = f'/api/places/nearby?lat={lat}&lng={lng}&radius=20000&japanese_only={japanese_str}'
                 res = await client.get(url)
                 res.raise_for_status()
                 all_places = res.json()
@@ -480,4 +481,4 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
             ''')
 
     from components.sos_button import add_sos_button
-    add_sos_button()
+    add_sos_button(str(request.base_url))

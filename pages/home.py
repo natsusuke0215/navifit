@@ -1,5 +1,6 @@
 import httpx
 from nicegui import ui
+from fastapi import Request
 
 JP_WOMAN_SVG = '''<svg width="22" height="28" viewBox="0 0 22 28" xmlns="http://www.w3.org/2000/svg">
   <path d="M5 9 Q5 3 11 3 Q17 3 17 9 Q17 6 11 7.5 Q5 6 5 9Z" fill="#2d1b0e"/>
@@ -37,7 +38,7 @@ def _aqi_badge(v: int) -> tuple:
     else:          return 'AQI 最悪', '#F44336', 'white'
 
 @ui.page('/')
-async def home_page():
+async def home_page(request: Request):
     ui.page_title('NaviFit — Trang chủ')
     # 1. Header cố định
     with ui.header().classes('items-center justify-between bg-white text-black shadow-md px-6 py-3'):
@@ -74,7 +75,7 @@ async def home_page():
                 # AQI cho khu vực (fetch 1 lần)
                 aqi_label, aqi_color, aqi_tc = 'AQI いい', '#4CAF50', 'white'
                 try:
-                    async with httpx.AsyncClient(timeout=3.0) as client:
+                    async with httpx.AsyncClient(base_url=str(request.base_url), timeout=3.0) as client:
                         r = await client.get(f'/api/aqi?lat={lat}&lng={lng}')
                         if r.status_code == 200:
                             aqi_label, aqi_color, aqi_tc = _aqi_badge(r.json().get('aqi_value', 0))
@@ -82,7 +83,7 @@ async def home_page():
                     pass
 
                 try:
-                    async with httpx.AsyncClient(timeout=5.0) as client:
+                    async with httpx.AsyncClient(base_url=str(request.base_url), timeout=5.0) as client:
                         res = await client.get(
                             f'/api/places/nearby'
                             f'?lat={lat}&lng={lng}&radius=20000')
@@ -341,4 +342,4 @@ async def home_page():
     ''')
 
     from components.sos_button import add_sos_button
-    add_sos_button()
+    add_sos_button(str(request.base_url))

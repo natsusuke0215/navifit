@@ -26,9 +26,17 @@ async def seed_data():
     import random
     from models import Place, SOSChannel, PlaceCategory, SOSType
     from models.best_time import BestTime
-    from sqlalchemy import delete
+    from sqlalchemy import delete, select, func
+
+    seed_enabled = os.getenv("SEED_ON_STARTUP", "true").lower() == "true"
 
     async with async_session() as session:
+        if not seed_enabled:
+            existing = await session.execute(select(func.count(Place.id)))
+            if existing.scalar() > 0:
+                print("Seed skipped: SEED_ON_STARTUP=false and places already exist.")
+                return
+
         # Xóa data cũ trước khi seed mới
         await session.execute(delete(BestTime))
         await session.execute(delete(Place))

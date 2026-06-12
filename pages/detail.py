@@ -1,16 +1,17 @@
 import httpx
 from nicegui import ui
+from fastapi import Request
 from datetime import datetime
 
 @ui.page('/detail/{place_id}')
-async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.843058, gps: int = 0):
+async def detail_page(request: Request, place_id: int, ulat: float = 21.006847, ulng: float = 105.843058, gps: int = 0):
     ui.page_title('NaviFit — 詳細')
 
     # ── 1. Fetch data ────────────────────────────────────────────────────────
     place = None
     best_times = []
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(base_url=str(request.base_url), timeout=10.0) as client:
             r1 = await client.get(f'/api/places/{place_id}/detail')
             r1.raise_for_status()
             place = r1.json()
@@ -152,7 +153,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
                     return
                 day_index = e.args.get('dataIndex', 0)
                 try:
-                    async with httpx.AsyncClient(timeout=10.0) as cl:
+                    async with httpx.AsyncClient(base_url=str(request.base_url), timeout=10.0) as cl:
                         r = await cl.get(f'/api/places/{place_id}/best-times?type=day&day_of_week={day_index}')
                         day_data = r.json()
                 except Exception:
@@ -192,7 +193,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
 
             async def load_reviews(page: int = 1):
                 try:
-                    async with httpx.AsyncClient(timeout=10.0) as cl:
+                    async with httpx.AsyncClient(base_url=str(request.base_url), timeout=10.0) as cl:
                         r = await cl.get(f'/api/places/{place_id}/reviews?page={page}&limit=10')
                         data = r.json()
                 except Exception:
@@ -237,7 +238,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
                     ui.notify('お名前を入力してください', type='warning')
                     return
                 try:
-                    async with httpx.AsyncClient(timeout=10.0) as cl:
+                    async with httpx.AsyncClient(base_url=str(request.base_url), timeout=10.0) as cl:
                         await cl.post(f'/api/places/{place_id}/reviews', json={
                             'user_name': name_input.value.strip(),
                             'rating': rating_radio.value,
@@ -263,7 +264,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
         cat_labels = {'gym': '🏋️ ジム', 'park': '🌳 公園', 'pool': '🏊 プール', 'badminton': '🏸 バドミントン'}
         similar_places = []
         try:
-            async with httpx.AsyncClient(timeout=10.0) as cl:
+            async with httpx.AsyncClient(base_url=str(request.base_url), timeout=10.0) as cl:
                 r_similar = await cl.get(
                     f'/api/places/nearby?lat={ulat}&lng={ulng}&radius=20000'
                 )
