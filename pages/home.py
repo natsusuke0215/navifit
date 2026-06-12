@@ -75,7 +75,7 @@ async def home_page():
                 aqi_label, aqi_color, aqi_tc = 'AQI いい', '#4CAF50', 'white'
                 try:
                     async with httpx.AsyncClient(timeout=3.0) as client:
-                        r = await client.get(f'http://127.0.0.1:8081/api/aqi?lat={lat}&lng={lng}')
+                        r = await client.get(f'/api/aqi?lat={lat}&lng={lng}')
                         if r.status_code == 200:
                             aqi_label, aqi_color, aqi_tc = _aqi_badge(r.json().get('aqi_value', 0))
                 except Exception:
@@ -84,7 +84,7 @@ async def home_page():
                 try:
                     async with httpx.AsyncClient(timeout=5.0) as client:
                         res = await client.get(
-                            f'http://127.0.0.1:8081/api/places/nearby'
+                            f'/api/places/nearby'
                             f'?lat={lat}&lng={lng}&radius=20000')
                         res.raise_for_status()
                         all_places = res.json()
