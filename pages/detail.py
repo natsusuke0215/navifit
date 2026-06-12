@@ -6,15 +6,15 @@ from datetime import datetime
 async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.843058, gps: int = 0):
     ui.page_title('NaviFit — 詳細')
 
-    # ── 1. Fetch data ──────────────────────────────────────────────────────────
+    # ── 1. Fetch data ────────────────────────────────────────────────────────
     place = None
     best_times = []
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            r1 = await client.get(f'http://127.0.0.1:8081/api/places/{place_id}/detail')
+            r1 = await client.get(f'/api/places/{place_id}/detail')
             r1.raise_for_status()
             place = r1.json()
-            r2 = await client.get(f'http://127.0.0.1:8081/api/places/{place_id}/best-times?type=week')
+            r2 = await client.get(f'/api/places/{place_id}/best-times?type=week')
             if r2.status_code == 200:
                 best_times = r2.json()
     except httpx.HTTPStatusError as e:
@@ -30,7 +30,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
             ui.button('← Quay lại', on_click=ui.navigate.back).classes('mt-4')
         return
 
-    # ── Leaflet CSS/JS ─────────────────────────────────────────────────────────
+    # ── Leaflet CSS/JS ────────────────────────────────────────────────────────
     ui.page_title(f'NaviFit — {place.get("name", "詳細")}')
     ui.add_head_html('''
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -41,7 +41,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
     place_lng = place.get('lng')
     place_name = place.get('name', '').replace("'", "\\'")
 
-    # ── 2. Header ──────────────────────────────────────────────────────────────
+    # ── 2. Header ─────────────────────────────────────────────────────────
     with ui.header().classes('items-center bg-white text-black shadow-md px-4 py-3 justify-between'):
         with ui.row().classes('items-center gap-2 flex-1 mr-4'):
             ui.html('<a href="/"><img src="/static/Logo.png" style="height:40px;width:auto;display:block;cursor:pointer;flex-shrink:0"></a>')
@@ -56,13 +56,13 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
         if place.get('has_japanese_support'):
             ui.badge('日本語対応').classes('bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full')
 
-    # ── 3. Body ────────────────────────────────────────────────────────────────
+    # ── 3. Body ──────────────────────────────────────────────────────────
     with ui.column().classes('max-w-2xl mx-auto w-full p-4 gap-4 pb-10'):
 
         # ── Route info bar ─────────────────────────────────────────────────────
         ui.html('<div id="route-info" style="padding:8px 14px;font-size:13px;font-weight:600;color:#1565C0;background:#E3F2FD;border-radius:10px;">🗺️ ルートを計算中...</div>').classes('w-full')
 
-        # ── Mini map ───────────────────────────────────────────────────────────
+        # ── Mini map ────────────────────────────────────────────────────────
         ui.html('<div id="detail-map" style="height:260px;width:100%;border-radius:14px;box-shadow:0 4px 12px rgba(0,0,0,0.12);"></div>').classes('w-full')
 
         # ── Basic info card ────────────────────────────────────────────────────
@@ -153,7 +153,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
                 day_index = e.args.get('dataIndex', 0)
                 try:
                     async with httpx.AsyncClient(timeout=10.0) as cl:
-                        r = await cl.get(f'http://127.0.0.1:8081/api/places/{place_id}/best-times?type=day&day_of_week={day_index}')
+                        r = await cl.get(f'/api/places/{place_id}/best-times?type=day&day_of_week={day_index}')
                         day_data = r.json()
                 except Exception:
                     return
@@ -184,7 +184,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
             back_btn.on_click(load_week_chart)
             chart.on('click', on_chart_click)
 
-        # ── Reviews ────────────────────────────────────────────────────────────
+        # ── Reviews ────────────────────────────────────────────────────────
         with ui.card().classes('w-full p-4 rounded-2xl shadow-sm'):
             ui.label('💬 ユーザーレビュー').classes('font-bold text-gray-800 mb-3')
             reviews_container = ui.column().classes('gap-3 w-full')
@@ -193,7 +193,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
             async def load_reviews(page: int = 1):
                 try:
                     async with httpx.AsyncClient(timeout=10.0) as cl:
-                        r = await cl.get(f'http://127.0.0.1:8081/api/places/{place_id}/reviews?page={page}&limit=10')
+                        r = await cl.get(f'/api/places/{place_id}/reviews?page={page}&limit=10')
                         data = r.json()
                 except Exception:
                     return {'reviews': [], 'total': 0, 'page': 1, 'total_pages': 1}
@@ -238,7 +238,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
                     return
                 try:
                     async with httpx.AsyncClient(timeout=10.0) as cl:
-                        await cl.post(f'http://127.0.0.1:8081/api/places/{place_id}/reviews', json={
+                        await cl.post(f'/api/places/{place_id}/reviews', json={
                             'user_name': name_input.value.strip(),
                             'rating': rating_radio.value,
                             'comment': comment_input.value.strip()
@@ -265,7 +265,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
         try:
             async with httpx.AsyncClient(timeout=10.0) as cl:
                 r_similar = await cl.get(
-                    f'http://127.0.0.1:8081/api/places/nearby?lat={ulat}&lng={ulng}&radius=20000'
+                    f'/api/places/nearby?lat={ulat}&lng={ulng}&radius=20000'
                 )
                 if r_similar.status_code == 200:
                     all_nearby = r_similar.json()
