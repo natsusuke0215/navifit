@@ -33,7 +33,7 @@ def aqi_to_badge(aqi_value: int) -> tuple:
 
 
 @ui.page('/search')
-async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.843058):
+async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.843058, gps: int = 0):
     ui.page_title('NaviFit — Tìm kiếm')
 
     japanese_filter = bool(app.storage.user.get('japanese_only', False))
@@ -137,6 +137,7 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
     display_places = build_display(places, suggestions)
     all_map_places = places + suggestions
     places_json = json.dumps(all_map_places)
+    query_json = json.dumps(q)
 
     # ── Header ────────────────────────────────────────────────────────────────
     with ui.header().classes('items-center bg-white text-black shadow-md px-4 py-3 justify-between'):
@@ -146,7 +147,7 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
                 ui.icon('search').classes('text-xl').style('color:#111;font-weight:900')
                 search_input = ui.input(
                     value=q,
-                    placeholder='Tìm địa điểm tập luyện...'
+                    placeholder='トレーニング場所を検索...'
                 ).props('borderless dense').classes('flex-1 text-sm bg-transparent')
                 search_input.on('keydown.enter', lambda: ui.navigate.to(
                     f'/search?q={search_input.value}&lat={lat}&lng={lng}'))
@@ -168,7 +169,7 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
         # ── Cột trái: Danh sách ───────────────────────────────────────────────
         with ui.column().classes('w-1/3 h-full overflow-y-auto p-4 border-r bg-gray-50 flex-shrink-0 gap-0'):
 
-            ui.label(f'Kết quả: "{q}"' if q else 'Địa điểm xung quanh').classes('text-lg font-bold mb-3')
+            ui.label(f'検索結果: "{q}"' if q else '周辺の場所').classes('text-lg font-bold mb-3')
 
             results_container = ui.column().classes('w-full gap-1')
             selected = {'card': None}  # card đang được chọn
@@ -251,6 +252,10 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
                                     ui.label(place.get('name', '')).classes(
                                         'font-semibold text-gray-800 text-sm leading-tight'
                                     ).style('overflow:hidden;text-overflow:ellipsis;white-space:nowrap')
+                                    if place.get('name_ja'):
+                                        ui.label(place['name_ja']).classes(
+                                            'text-gray-400 text-xs leading-tight'
+                                        ).style('overflow:hidden;text-overflow:ellipsis;white-space:nowrap')
                                     if place.get('address'):
                                         ui.label(place['address']).classes('text-gray-400 text-xs').style(
                                             'overflow:hidden;text-overflow:ellipsis;white-space:nowrap')
@@ -312,11 +317,24 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
 
                 window.userMarker = L.circleMarker([window.userLat, window.userLng], {{
                     radius: 8, color: '#4285F4', fillColor: '#4285F4', fillOpacity: 1, zIndexOffset: 1000
-                }}).addTo(searchMap).bindPopup('Vị trí của bạn');
+                }}).addTo(searchMap).bindPopup('現在地');
 
                 window.markers = {{}};
                 window.currentRouteLayer = null;
+                window.routeRequestId = 0;
                 window.places = {places_json};
+                window.searchQuery = {query_json};
+
+                function distanceMeters(lat1, lng1, lat2, lng2) {{
+                    const R = 6371000;
+                    const toRad = d => d * Math.PI / 180;
+                    const dLat = toRad(lat2 - lat1);
+                    const dLng = toRad(lng2 - lng1);
+                    const a = Math.sin(dLat / 2) ** 2 +
+                        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                        Math.sin(dLng / 2) ** 2;
+                    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                }}
 
                 var CATEGORY_ICON = {{
                     'gym':        {{ emoji: '🏋️', bg: '#E3F2FD', border: '#1976D2' }},
@@ -359,7 +377,7 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
                                 <b>${{p.name}}</b><br>
                                 <span style="color:#666;font-size:12px">${{p.name_ja || ''}}</span><br>
                                 <span>📍 ${{(p.distance/1000).toFixed(1)}} km · ⭐ ${{p.rating}}</span><br>
-                                <a href="/detail/${{p.id}}" style="color:#1976D2;font-weight:bold;font-size:12px">Xem chi tiết →</a>
+                                <a href="/detail/${{p.id}}" style="color:#1976D2;font-weight:bold;font-size:12px">詳細を見る →</a>
                             </div>`);
                     }});
                 }}
@@ -374,10 +392,18 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
                     window.currentDestLat = destLat;
                     window.currentDestLng = destLng;
                     if (!destLat || !destLng) return;
+                    const requestId = ++window.routeRequestId;
                     try {{
-                        const url = `https://router.project-osrm.org/route/v1/driving/${{window.userLng}},${{window.userLat}};${{destLng}},${{destLat}}?overview=full&geometries=geojson`;
+                        const fromLng = Number(window.userLng);
+                        const fromLat = Number(window.userLat);
+                        const toLng = Number(destLng);
+                        const toLat = Number(destLat);
+                        if (![fromLng, fromLat, toLng, toLat].every(Number.isFinite)) return;
+                        const coords = `${{fromLng}},${{fromLat}};${{toLng}},${{toLat}}`;
+                        const url = `https://router.project-osrm.org/route/v1/driving/${{coords}}?overview=full&geometries=geojson&steps=false&alternatives=false`;
                         const res = await fetch(url);
                         const data = await res.json();
+                        if (requestId !== window.routeRequestId) return;
                         if (data.routes && data.routes[0]) {{
                             const route = data.routes[0];
                             if (window.currentRouteLayer) searchMap.removeLayer(window.currentRouteLayer);
@@ -387,18 +413,59 @@ async def search_page(q: str = '', lat: float = 21.006847, lng: float = 105.8430
                             searchMap.fitBounds(window.currentRouteLayer.getBounds(), {{ padding: [40, 40] }});
                             const km = (route.distance / 1000).toFixed(1);
                             const min = Math.round(route.duration / 60);
-                            document.getElementById('route-info').innerHTML = `🚗 ${{km}} km &nbsp;·&nbsp; ⏱ ${{min}} phút lái xe`;
+                            document.getElementById('route-info').innerHTML = `🚗 ${{km}} km &nbsp;·&nbsp; ⏱ 車で${{min}}分`;
+                        }} else {{
+                            document.getElementById('route-info').innerHTML = 'ルートを計算できませんでした。';
                         }}
                     }} catch(e) {{
-                        document.getElementById('route-info').innerHTML = 'Lỗi tính đường đi.';
+                        if (requestId !== window.routeRequestId) return;
+                        document.getElementById('route-info').innerHTML = 'ルートを計算できませんでした。';
                     }}
+                }};
+
+                window.setUserLocation = function(lat, lng) {{
+                    window.userLat = lat;
+                    window.userLng = lng;
+                    if (window.userMarker) {{
+                        window.userMarker.setLatLng([lat, lng]);
+                    }}
+                    const params = new URLSearchParams(window.location.search);
+                    const alreadyGps = params.get('gps') === '1';
+                    const urlLat = Number(params.get('lat') || {lat});
+                    const urlLng = Number(params.get('lng') || {lng});
+                    if (!alreadyGps && distanceMeters(urlLat, urlLng, lat, lng) > 50) {{
+                        params.set('q', window.searchQuery || '');
+                        params.set('lat', lat.toFixed(6));
+                        params.set('lng', lng.toFixed(6));
+                        params.set('gps', '1');
+                        window.location.replace('/search?' + params.toString());
+                        return;
+                    }}
+                    searchMap.setView([lat, lng], Math.max(searchMap.getZoom(), 14));
+                    if (window.currentDestLat && window.currentDestLng) {{
+                        window.drawRoute(window.currentDestLat, window.currentDestLng);
+                    }}
+                }};
+
+                window.requestCurrentLocation = function() {{
+                    if (!navigator.geolocation) return;
+                    navigator.geolocation.getCurrentPosition(
+                        function(pos) {{
+                            window.setUserLocation(pos.coords.latitude, pos.coords.longitude);
+                        }},
+                        function(err) {{
+                            console.warn('Could not get current location:', err);
+                        }},
+                        {{ enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }}
+                    );
                 }};
 
                 if (window.places.length > 0) {{
                     window.drawRoute(window.places[0].lat, window.places[0].lng);
                 }} else {{
-                    document.getElementById('route-info').innerHTML = 'Không có địa điểm để vẽ đường.';
+                    document.getElementById('route-info').innerHTML = 'ルートを表示する場所がありません。';
                 }}
+                window.requestCurrentLocation();
 
                 window.highlightMarker = function(placeId) {{
                     if (window.markers[placeId]) {{

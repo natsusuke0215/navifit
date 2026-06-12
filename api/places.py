@@ -87,7 +87,7 @@ async def get_best_times(place_id: int, type: str = Query("week"), day_of_week: 
         res = await db.execute(stmt)
         data = res.all()
         
-        days = {0: "T2", 1: "T3", 2: "T4", 3: "T5", 4: "T6", 5: "T7", 6: "CN"}
+        days = {0: "月", 1: "火", 2: "水", 3: "木", 4: "金", 5: "土", 6: "日"}
         result_map = {i: 0 for i in range(7)}
         for row in data:
             result_map[row.day_of_week] = int(row.avg_score)

@@ -3,8 +3,8 @@ from nicegui import ui
 from datetime import datetime
 
 @ui.page('/detail/{place_id}')
-async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.843058):
-    ui.page_title('NaviFit — Chi tiết địa điểm')
+async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.843058, gps: int = 0):
+    ui.page_title('NaviFit — 詳細')
 
     # ── 1. Fetch data ──────────────────────────────────────────────────────────
     place = None
@@ -31,7 +31,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
         return
 
     # ── Leaflet CSS/JS ─────────────────────────────────────────────────────────
-    ui.page_title(f'NaviFit — {place.get("name", "Chi tiết địa điểm")}')
+    ui.page_title(f'NaviFit — {place.get("name", "詳細")}')
     ui.add_head_html('''
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -49,7 +49,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
             with ui.row().classes('items-center flex-1 bg-gray-100 rounded-full px-3 py-1 gap-1'):
                 ui.icon('search').classes('text-xl').style('color:#111;font-weight:900')
                 detail_search = ui.input(
-                    placeholder='Tìm địa điểm tập luyện...'
+                    placeholder='トレーニング場所を検索...'
                 ).props('borderless dense').classes('flex-1 text-sm bg-transparent')
                 detail_search.on('keydown.enter', lambda: ui.navigate.to(
                     f'/search?q={detail_search.value}&lat={ulat}&lng={ulng}'))
@@ -60,7 +60,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
     with ui.column().classes('max-w-2xl mx-auto w-full p-4 gap-4 pb-10'):
 
         # ── Route info bar ─────────────────────────────────────────────────────
-        ui.html('<div id="route-info" style="padding:8px 14px;font-size:13px;font-weight:600;color:#1565C0;background:#E3F2FD;border-radius:10px;">🗺️ Đang tính đường đi...</div>').classes('w-full')
+        ui.html('<div id="route-info" style="padding:8px 14px;font-size:13px;font-weight:600;color:#1565C0;background:#E3F2FD;border-radius:10px;">🗺️ ルートを計算中...</div>').classes('w-full')
 
         # ── Mini map ───────────────────────────────────────────────────────────
         ui.html('<div id="detail-map" style="height:260px;width:100%;border-radius:14px;box-shadow:0 4px 12px rgba(0,0,0,0.12);"></div>').classes('w-full')
@@ -75,7 +75,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
             ui.separator()
 
             # Address
-            ui.label(f"📍 {place.get('address', 'Chưa có địa chỉ')}").classes('text-gray-600 text-sm')
+            ui.label(f"📍 {place.get('address', '住所未登録')}").classes('text-gray-600 text-sm')
 
             # Rating stars
             rating = place.get('rating', 0)
@@ -86,22 +86,22 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
                 ui.label(f'{rating} / 5').classes('text-gray-600 text-sm font-medium')
 
             # Category badge
-            cat_labels = {'gym': '🏋️ Phòng gym', 'park': '🌳 Công viên', 'pool': '🏊 Hồ bơi', 'badminton': '🏸 Cầu lông'}
+            cat_labels = {'gym': '🏋️ ジム', 'park': '🌳 公園', 'pool': '🏊 プール', 'badminton': '🏸 バドミントン'}
             cat_key = place.get('category', '')
             with ui.row().classes('gap-2 flex-wrap mt-1'):
                 ui.badge(cat_labels.get(cat_key, cat_key.upper())).classes('bg-indigo-100 text-indigo-700 text-xs px-2 py-1 rounded-full')
                 if place.get('is_indoor'):
-                    ui.badge('🏠 Trong nhà').classes('bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full')
+                    ui.badge('🏠 屋内').classes('bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full')
                 if place.get('has_japanese_support'):
-                    ui.badge('🇯🇵 Hỗ trợ tiếng Nhật').classes('bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full')
+                    ui.badge('🇯🇵 日本語対応').classes('bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full')
 
             # Opening hours
             hours = place.get('opening_hours') or {}
             if hours:
                 ui.separator()
-                day_map = {0:'T2', 1:'T3', 2:'T4', 3:'T5', 4:'T6', 5:'T7', 6:'CN'}
+                day_map = {0:'月', 1:'火', 2:'水', 3:'木', 4:'金', 5:'土', 6:'日'}
                 today_label = day_map.get(datetime.now().weekday(), '')
-                ui.label('🕐 Giờ mở cửa').classes('font-semibold text-sm text-gray-700')
+                ui.label('🕐 営業時間').classes('font-semibold text-sm text-gray-700')
                 with ui.grid(columns=2).classes('w-full gap-x-4 gap-y-0'):
                     for day, time in hours.items():
                         is_today = (day == today_label)
@@ -116,8 +116,8 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
 
         # ── Best-times chart ───────────────────────────────────────────────────
         with ui.card().classes('w-full p-4 rounded-2xl shadow-sm'):
-            ui.label('⏰ Thời gian tập tốt nhất').classes('font-bold text-gray-800 mb-1')
-            ui.label('Nhấn vào cột để xem chi tiết theo giờ trong ngày').classes('text-xs text-gray-400 mb-3')
+            ui.label('⏰ おすすめの利用時間').classes('font-bold text-gray-800 mb-1')
+            ui.label('棒グラフを押すと時間帯ごとの詳細を表示します').classes('text-xs text-gray-400 mb-3')
 
             chart_mode = {'mode': 'week'}
 
@@ -125,7 +125,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
             week_colors  = ['#4CAF50' if s >= 70 else '#FFC107' if s >= 40 else '#F44336' for s in week_scores]
             week_labels  = [t.get('label', '') for t in best_times]
 
-            back_btn = ui.button('← Về biểu đồ tuần').classes('text-sm text-blue-500 mb-2 self-start')
+            back_btn = ui.button('← 週間グラフに戻る').classes('text-sm text-blue-500 mb-2 self-start')
             back_btn.set_visibility(False)
 
             chart = ui.echart({
@@ -186,7 +186,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
 
         # ── Reviews ────────────────────────────────────────────────────────────
         with ui.card().classes('w-full p-4 rounded-2xl shadow-sm'):
-            ui.label('💬 Đánh giá từ người dùng').classes('font-bold text-gray-800 mb-3')
+            ui.label('💬 ユーザーレビュー').classes('font-bold text-gray-800 mb-3')
             reviews_container = ui.column().classes('gap-3 w-full')
             page_state = {'page': 1, 'has_more': False}
 
@@ -201,12 +201,12 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
                 with reviews_container:
                     revs = data.get('reviews', [])
                     if not revs and page == 1:
-                        ui.label('Chưa có đánh giá nào. Hãy là người đầu tiên!').classes('text-gray-400 text-sm italic')
+                        ui.label('まだレビューはありません。最初のレビューを書いてみましょう。').classes('text-gray-400 text-sm italic')
                     for rev in revs:
                         stars_str = '★' * rev['rating'] + '☆' * (5 - rev['rating'])
                         with ui.card().classes('w-full bg-gray-50 p-3 rounded-xl'):
                             with ui.row().classes('items-center gap-2 mb-1'):
-                                ui.label(rev.get('user_name', 'Ẩn danh')).classes('font-semibold text-sm')
+                                ui.label(rev.get('user_name', '匿名')).classes('font-semibold text-sm')
                                 ui.label(stars_str).classes('text-yellow-400 text-sm')
                             if rev.get('comment'):
                                 ui.label(rev['comment']).classes('text-gray-600 text-sm leading-relaxed')
@@ -223,18 +223,18 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
                         data = await load_reviews(page_state['page'])
                         if data.get('page', 1) >= data.get('total_pages', 1):
                             load_more_btn_container.clear()
-                    ui.button('Xem thêm đánh giá', on_click=load_more).classes('w-full mt-2').props('outline color=primary')
+                    ui.button('レビューをもっと見る', on_click=load_more).classes('w-full mt-2').props('outline color=primary')
 
         # ── Write review dialog ────────────────────────────────────────────────
         with ui.dialog() as review_dialog, ui.card().classes('w-80 p-5 gap-3 rounded-2xl'):
-            ui.label('✏️ Viết đánh giá').classes('font-bold text-lg text-gray-800')
-            name_input    = ui.input('Tên của bạn').classes('w-full')
+            ui.label('✏️ レビューを書く').classes('font-bold text-lg text-gray-800')
+            name_input    = ui.input('お名前').classes('w-full')
             rating_radio  = ui.radio([1, 2, 3, 4, 5], value=5).props('inline')
-            comment_input = ui.textarea('Nhận xét', placeholder='Chia sẻ trải nghiệm của bạn...').classes('w-full')
+            comment_input = ui.textarea('コメント', placeholder='体験を共有してください...').classes('w-full')
 
             async def submit_review():
                 if not name_input.value.strip():
-                    ui.notify('Vui lòng nhập tên của bạn', type='warning')
+                    ui.notify('お名前を入力してください', type='warning')
                     return
                 try:
                     async with httpx.AsyncClient(timeout=10.0) as cl:
@@ -244,23 +244,23 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
                             'comment': comment_input.value.strip()
                         })
                     review_dialog.close()
-                    ui.notify('🎉 Cảm ơn bạn đã đánh giá!', type='positive')
+                    ui.notify('🎉 レビューありがとうございます！', type='positive')
                     # Reload reviews
                     reviews_container.clear()
                     await load_reviews(1)
                 except Exception as e:
-                    ui.notify('Lỗi khi gửi đánh giá', type='negative')
+                    ui.notify('レビューの送信に失敗しました', type='negative')
                     print("Submit review error:", e)
 
             with ui.row().classes('w-full gap-2 mt-2'):
-                ui.button('Huỷ', on_click=review_dialog.close).props('flat').classes('flex-1')
-                ui.button('Gửi đánh giá', on_click=submit_review).classes('flex-1 bg-blue-500 text-white')
+                ui.button('キャンセル', on_click=review_dialog.close).props('flat').classes('flex-1')
+                ui.button('送信', on_click=submit_review).classes('flex-1 bg-blue-500 text-white')
 
-        ui.button('✏️ Viết đánh giá', on_click=review_dialog.open).classes('w-full').props('color=primary')
+        ui.button('✏️ レビューを書く', on_click=review_dialog.open).classes('w-full').props('color=primary')
 
         # ── Similar places section ───────────────────────────────────────
         cat_key = place.get('category', '')
-        cat_labels = {'gym': '🏋️ Phòng gym', 'park': '🌳 Công viên', 'pool': '🏊 Hồ bơi', 'badminton': '🏸 Cầu lông'}
+        cat_labels = {'gym': '🏋️ ジム', 'park': '🌳 公園', 'pool': '🏊 プール', 'badminton': '🏸 バドミントン'}
         similar_places = []
         try:
             async with httpx.AsyncClient(timeout=10.0) as cl:
@@ -280,7 +280,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
 
         if similar_places:
             with ui.card().classes('w-full p-4 rounded-2xl shadow-sm'):
-                ui.label(f'📍 Địa điểm {cat_labels.get(cat_key, "cùng loại")} khác').classes('font-bold text-gray-800 mb-3')
+                ui.label(f'📍 近くの{cat_labels.get(cat_key, "同じカテゴリの場所")}').classes('font-bold text-gray-800 mb-3')
                 for sp in similar_places:
                     dist_km = round(sp.get('distance', 0) / 1000, 1)
                     has_jp  = sp.get('has_japanese_support', False)
@@ -297,7 +297,7 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
                             with ui.column().classes('items-end gap-1 flex-shrink-0'):
                                 if has_jp:
                                     ui.badge('🇯🇵 日本語').classes('bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full')
-                                ui.label('Chi tiết →').classes('text-blue-500 text-xs font-medium')
+                                ui.label('詳細 →').classes('text-blue-500 text-xs font-medium')
 
     # ── Map JS (inject after body renders) ───────────────────────────────────
     ui.add_body_html(f'''
@@ -324,42 +324,94 @@ async def detail_page(place_id: int, ulat: float = 21.006847, ulng: float = 105.
 
         var uLat = {ulat};
         var uLng = {ulng};
+        var currentRouteLayer = null;
+        var routeRequestId = 0;
+
+        function distanceMeters(lat1, lng1, lat2, lng2) {{
+            const R = 6371000;
+            const toRad = d => d * Math.PI / 180;
+            const dLat = toRad(lat2 - lat1);
+            const dLng = toRad(lng2 - lng1);
+            const a = Math.sin(dLat / 2) ** 2 +
+                Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                Math.sin(dLng / 2) ** 2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }}
 
         var userIcon = L.divIcon({{
             html: '<div style="background:#4285F4;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,.4)"></div>',
             iconSize:[12,12], iconAnchor:[6,6], className:''
         }});
-        L.marker([uLat, uLng], {{icon:userIcon}})
-            .addTo(detailMap).bindPopup('Vị trí của bạn (B1 HUST)');
+        var userMarker = L.marker([uLat, uLng], {{icon:userIcon}})
+            .addTo(detailMap).bindPopup('現在地');
 
-        var osrmUrl = 'https://router.project-osrm.org/route/v1/driving/'
-            + uLng + ',' + uLat + ';'
-            + {place_lng} + ',' + {place_lat}
-            + '?overview=full&geometries=geojson';
+        function drawRouteFrom(userLat, userLng) {{
+            var requestId = ++routeRequestId;
+            var fromLat = Number(userLat);
+            var fromLng = Number(userLng);
+            var toLat = Number({place_lat});
+            var toLng = Number({place_lng});
+            if (![fromLat, fromLng, toLat, toLng].every(Number.isFinite)) return;
+            var osrmUrl = 'https://router.project-osrm.org/route/v1/driving/'
+                + fromLng + ',' + fromLat + ';'
+                + toLng + ',' + toLat
+                + '?overview=full&geometries=geojson&steps=false&alternatives=false';
 
-        fetch(osrmUrl).then(r => r.json()).then(data => {{
-            if (data.routes && data.routes[0]) {{
-                var route  = data.routes[0];
-                var dist   = (route.distance / 1000).toFixed(1);
-                var dur    = Math.round(route.duration / 60);
+            fetch(osrmUrl).then(r => r.json()).then(data => {{
+                if (requestId !== routeRequestId) return;
+                if (data.routes && data.routes[0]) {{
+                    var route  = data.routes[0];
+                    var dist   = (route.distance / 1000).toFixed(1);
+                    var dur    = Math.round(route.duration / 60);
 
-                L.geoJSON(route.geometry, {{
-                    style: {{color:'#1976D2', weight:4, opacity:0.85}}
-                }}).addTo(detailMap);
+                    if (currentRouteLayer) detailMap.removeLayer(currentRouteLayer);
+                    currentRouteLayer = L.geoJSON(route.geometry, {{
+                        style: {{color:'#1976D2', weight:4, opacity:0.85}}
+                    }}).addTo(detailMap);
 
-                detailMap.fitBounds(
-                    L.geoJSON(route.geometry).getBounds(),
-                    {{padding:[25,25]}}
-                );
+                    detailMap.fitBounds(currentRouteLayer.getBounds(), {{padding:[25,25]}});
 
+                    var el = document.getElementById('route-info');
+                    if (el) el.innerHTML = '🚗 ' + dist + ' km &nbsp;·&nbsp; ⏱ 車で約' + dur + '分';
+                }} else {{
+                    var el = document.getElementById('route-info');
+                    if (el) el.innerHTML = '⚠️ ルートを計算できませんでした。';
+                }}
+            }}).catch(() => {{
+                if (requestId !== routeRequestId) return;
+                detailMap.setView([{place_lat},{place_lng}], 15);
                 var el = document.getElementById('route-info');
-                if (el) el.innerHTML = '🚗 Cách ' + dist + ' km &nbsp;·&nbsp; ⏱ ~' + dur + ' phút lái xe';
-            }}
-        }}).catch(() => {{
-            detailMap.setView([{place_lat},{place_lng}], 15);
-            var el = document.getElementById('route-info');
-            if (el) el.innerHTML = '⚠️ Không thể tính đường đi lúc này.';
-        }});
+                if (el) el.innerHTML = '⚠️ ルートを計算できませんでした。';
+            }});
+        }}
+
+        drawRouteFrom(uLat, uLng);
+
+        if (navigator.geolocation) {{
+            navigator.geolocation.getCurrentPosition(
+                function(pos) {{
+                    uLat = pos.coords.latitude;
+                    uLng = pos.coords.longitude;
+                    userMarker.setLatLng([uLat, uLng]);
+                    var params = new URLSearchParams(window.location.search);
+                    var alreadyGps = params.get('gps') === '1';
+                    var urlLat = Number(params.get('ulat') || {ulat});
+                    var urlLng = Number(params.get('ulng') || {ulng});
+                    if (!alreadyGps && distanceMeters(urlLat, urlLng, uLat, uLng) > 50) {{
+                        params.set('ulat', uLat.toFixed(6));
+                        params.set('ulng', uLng.toFixed(6));
+                        params.set('gps', '1');
+                        window.location.replace(window.location.pathname + '?' + params.toString());
+                        return;
+                    }}
+                    drawRouteFrom(uLat, uLng);
+                }},
+                function(err) {{
+                    console.warn('Could not get current location:', err);
+                }},
+                {{ enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }}
+            );
+        }}
     }}
     setTimeout(initDetailMap, 100);
     </script>

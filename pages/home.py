@@ -179,7 +179,7 @@ async def home_page():
             ):
                 ui.icon('search').classes('text-xl flex-shrink-0').style('color:#111;font-weight:900')
                 search_input = ui.input(
-                    placeholder='Tìm địa điểm tập luyện...',
+                    placeholder='トレーニング場所を検索...',
                     on_change=on_input
                 ).classes('flex-1').props('borderless dense clearable')
             search_input.on('keydown.enter', handle_search)
@@ -257,9 +257,15 @@ async def home_page():
             });
         }
 
+        window.mapPlaceMarkers = [];
+
         // Hàm load địa điểm gần đây từ API
         async function fetchNearbyPlaces(lat, lng) {
             try {
+                window.mapPlaceMarkers.forEach(function(marker) {
+                    map.removeLayer(marker);
+                });
+                window.mapPlaceMarkers = [];
                 var res = await fetch('/api/places/nearby?lat=' + lat + '&lng=' + lng + '&radius=20000');
                 var places = await res.json();
                 window.map_places = places;
@@ -281,18 +287,18 @@ async def home_page():
                         (japanBadge ? '<div style="margin-bottom:8px;">' + japanBadge + '</div>' : '') +
                         '<a href="/detail/' + place.id + '?ulat=' + lat + '&ulng=' + lng + '" ' +
                         'style="display:inline-block;background:#1a73e8;color:#fff;text-decoration:none;' +
-                        'font-weight:600;font-size:12px;padding:5px 12px;border-radius:6px;">Xem chi tiết →</a>' +
+                        'font-weight:600;font-size:12px;padding:5px 12px;border-radius:6px;">詳細を見る →</a>' +
                         '</div>';
-                    L.marker([place.lat, place.lng], { icon: icon })
+                    window.mapPlaceMarkers.push(L.marker([place.lat, place.lng], { icon: icon })
                         .addTo(map)
-                        .bindPopup(popup);
+                        .bindPopup(popup));
                 });
             } catch(e) {
                 console.error('Loi load dia diem:', e);
             }
         }
 
-        // Dùng tọa độ Hà Nội làm mặc định (không yêu cầu GPS)
+        // Dùng tọa độ Hà Nội làm mặc định, sau đó cập nhật bằng GPS nếu trình duyệt cho phép.
         var defaultLat = 21.006847;
         var defaultLng = 105.843058;
         window.currentLat = defaultLat;
@@ -305,12 +311,29 @@ async def home_page():
             iconSize: [18, 18],
             iconAnchor: [9, 9]
         });
-        L.marker([defaultLat, defaultLng], {icon: userIcon})
+        var userMarker = L.marker([defaultLat, defaultLng], {icon: userIcon})
             .addTo(map)
-            .bindPopup('<b>Vị trí của bạn</b><br><small>Nhà B1 - Đại học Bách khoa Hà Nội</small>')
+            .bindPopup('<b>現在地</b><br><small>B1棟 - ハノイ工科大学</small>')
             .openPopup();
 
         fetchNearbyPlaces(defaultLat, defaultLng);
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function(pos) {
+                    window.currentLat = pos.coords.latitude;
+                    window.currentLng = pos.coords.longitude;
+                    userMarker.setLatLng([window.currentLat, window.currentLng]);
+                    userMarker.bindPopup('<b>現在地</b>');
+                    map.setView([window.currentLat, window.currentLng], 15);
+                    fetchNearbyPlaces(window.currentLat, window.currentLng);
+                },
+                function(err) {
+                    console.warn('Could not get current location:', err);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+            );
+        }
     }
 
     setTimeout(initLeaflet, 100);
