@@ -42,7 +42,7 @@ async def search_page(request: Request, q: str = '', lat: float = 21.006847, lng
     # Lấy AQI một lần cho toàn khu vực
     aqi_label, aqi_color, aqi_text_color = 'AQI いい', '#4CAF50', 'white'
     try:
-        async with httpx.AsyncClient(base_url=str(request.base_url), timeout=5.0) as client:
+        async with httpx.AsyncClient(base_url=str(request.base_url), follow_redirects=True, timeout=5.0) as client:
             aqi_res = await client.get(f'/api/aqi?lat={lat}&lng={lng}')
             if aqi_res.status_code == 200:
                 aqi_data = aqi_res.json()
@@ -75,7 +75,7 @@ async def search_page(request: Request, q: str = '', lat: float = 21.006847, lng
 
     async def fetch_places(japanese_only: bool = False) -> tuple:
         try:
-            async with httpx.AsyncClient(base_url=str(request.base_url), timeout=10.0) as client:
+            async with httpx.AsyncClient(base_url=str(request.base_url), follow_redirects=True, timeout=10.0) as client:
                 japanese_str = 'true' if japanese_only else 'false'
                 url = f'/api/places/nearby?lat={lat}&lng={lng}&radius=20000&japanese_only={japanese_str}'
                 res = await client.get(url)

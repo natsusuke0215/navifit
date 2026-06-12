@@ -19,7 +19,7 @@ def add_sos_button(base_url: str = ''):
         dialog.open()
 
         try:
-            resp = await httpx.AsyncClient(base_url=base_url).get('/api/sos/channels')
+            resp = await httpx.AsyncClient(base_url=base_url, follow_redirects=True).get('/api/sos/channels')
             if resp.status_code == 200:
                 channels = resp.json()
             else:

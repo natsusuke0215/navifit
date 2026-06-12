@@ -75,7 +75,7 @@ async def home_page(request: Request):
                 # AQI cho khu vực (fetch 1 lần)
                 aqi_label, aqi_color, aqi_tc = 'AQI いい', '#4CAF50', 'white'
                 try:
-                    async with httpx.AsyncClient(base_url=str(request.base_url), timeout=3.0) as client:
+                    async with httpx.AsyncClient(base_url=str(request.base_url), follow_redirects=True, timeout=3.0) as client:
                         r = await client.get(f'/api/aqi?lat={lat}&lng={lng}')
                         if r.status_code == 200:
                             aqi_label, aqi_color, aqi_tc = _aqi_badge(r.json().get('aqi_value', 0))
@@ -83,7 +83,7 @@ async def home_page(request: Request):
                     pass
 
                 try:
-                    async with httpx.AsyncClient(base_url=str(request.base_url), timeout=5.0) as client:
+                    async with httpx.AsyncClient(base_url=str(request.base_url), follow_redirects=True, timeout=5.0) as client:
                         res = await client.get(
                             f'/api/places/nearby'
                             f'?lat={lat}&lng={lng}&radius=20000')
