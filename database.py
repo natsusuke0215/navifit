@@ -41,8 +41,7 @@ async def seed_data():
         await session.execute(delete(BestTime))
         await session.execute(delete(Place))
         await session.execute(delete(SOSChannel))
-        await session.commit()
-
+        
         # ── Địa điểm tập luyện và dịch vụ tại Hà Nội ──────────────────────────
         places = [
             # PARK
@@ -362,6 +361,10 @@ async def seed_data():
                         hour=hour,
                         score=base_score(day, hour)
                     ))
-        session.add_all(best_time_records)
+        BATCH_SIZE = 500
+        for i in range(0, len(best_time_records), BATCH_SIZE):
+            session.add_all(best_time_records[i:i + BATCH_SIZE])
+            await session.commit()
+        print(f"Seeded best_times batch {i // BATCH_SIZE + 1}/{(len(best_time_records) + BATCH_SIZE - 1) // BATCH_SIZE}")
 
-        await session.commit()
+        
