@@ -78,8 +78,10 @@ async def startup_db():
         print(f"Error initializing database: {e}")
 
 
+import os
+
+PORT = int(os.environ.get("PORT", 8081))
+
 # Khởi chạy ứng dụng
 if __name__ in {"__main__", "__mp_main__"}:
-    # Do cổng 8080 của bạn bị báo lỗi [WinError 10013] (port đang được dùng), 
-    # chúng ta chạy cả UI và API chung trên port 8081
-    ui.run(title='NaviFit', port=8081, reload=True, storage_secret='navifit-secret-key-2025')
+    ui.run(title='NaviFit', port=PORT, reload=False, storage_secret='navifit-secret-key-2025')
